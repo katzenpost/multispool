@@ -1,0 +1,34 @@
+[package]
+name = "multispool"
+version = "0.0.0"
+authors = ["David Stainton <dawuud@riseup.net>"]
+
+[lib]
+doctest = false
+test = false
+
+[dependencies]
+grpc            = "~0.5"
+protobuf        = "2"
+futures         = "0.1.*"
+futures-cpupool = "0.1.*"
+httpbis         = "~0.7"
+env_logger      = "0.4.*"
+tls-api            = "0.1.*"
+tls-api-native-tls = "0.1.*"
+tls-api-stub = "0.1.*"
+rand = "0.5.4"
+log = "0.4.3"
+log4rs = "0.8.0"
+clap = "2.32.0"
+sled = "0.19.0"
+appendix = "2.0.0"
+sphinxcrypto = "0.0.19"
+base64 = "0.10.1"
+
+[build-dependencies]
+protoc-rust-grpc = "0.5.0"
+
+[[bin]]
+name = "spool_server"
+test = false
