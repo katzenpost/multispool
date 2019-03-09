@@ -78,16 +78,16 @@ fn main() {
 
     // Start our grpc service.
     info!("multi-spool starting up");
-    let mut server: grpc::ServerBuilder<tls_api_stub::TlsAcceptor> = grpc::ServerBuilder::new();
+    let mut server_builder: grpc::ServerBuilder<tls_api_stub::TlsAcceptor> = grpc::ServerBuilder::new();
     let rand_string: String = thread_rng()
         .sample_iter(&Alphanumeric)
         .take(10)
         .collect();
     let socket = format!("/tmp/multispool_{}.sock", rand_string);
-    server.http.set_unix_addr(socket.to_string()).unwrap();
-    server.add_service(KaetzchenServer::new_service_def(SpoolService::new()));
-    server.http.set_cpu_pool_threads(4);
-    let _server = server.build().expect("server");
+    server_builder.http.set_unix_addr(socket.to_string()).unwrap();
+    server_builder.add_service(KaetzchenServer::new_service_def(SpoolService::new()));
+    server_builder.http.set_cpu_pool_threads(4); // XXX
+    let _server = server_builder.build().expect("server");
 
     println!("{}|{}|unix|{}|grpc", CORE_PROTOCOL_VERSION, KAETZENPOST_PLUGIN_VERSION, socket);
 

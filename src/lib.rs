@@ -7,8 +7,8 @@ extern crate grpc;
 extern crate tls_api;
 extern crate tls_api_stub;
 extern crate base64;
+extern crate byteorder;
 extern crate sled;
-extern crate appendix;
 extern crate sphinxcrypto;
 
 pub mod spool;

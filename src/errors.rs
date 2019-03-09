@@ -16,6 +16,7 @@
 
 use std::fmt;
 use std::error::Error;
+use sled::Error as SledError;
 use std::io::Error as IoError;
 
 #[derive(Debug)]
@@ -47,7 +48,8 @@ impl Error for SpoolSetError {
 
 #[derive(Debug)]
 pub enum SpoolError {
-    CreateSpoolSetCacheFailed,
+    CreateSpoolCacheFailed,
+    SledError(SledError<()>),
     IoError(IoError),
 }
 
@@ -55,7 +57,8 @@ impl fmt::Display for SpoolError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::SpoolError::*;
         match self {
-            CreateSpoolSetCacheFailed => write!(f, "Failed to spool set create cache."),
+            CreateSpoolCacheFailed => write!(f, "Failed to spool set create cache."),
+            SledError(x) => x.fmt(f),
             IoError(x) => x.fmt(f),
         }
     }
@@ -69,9 +72,16 @@ impl Error for SpoolError {
     fn cause(&self) -> Option<&Error> {
         use self::SpoolError::*;
         match self {
-            CreateSpoolSetCacheFailed => None,
+            CreateSpoolCacheFailed => None,
+            SledError(x) => x.source(),
             IoError(x) => x.source(),
         }
+    }
+}
+
+impl From<SledError<()>> for SpoolError {
+    fn from(error: SledError<()>) -> Self {
+        SpoolError::SledError(error)
     }
 }
 
