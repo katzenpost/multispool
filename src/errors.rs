@@ -16,41 +16,17 @@
 
 use std::fmt;
 use std::error::Error;
-use sled::Error as SledError;
 use std::io::Error as IoError;
+use sled::Error as SledError;
+use ed25519_dalek::SignatureError;
 
-#[derive(Debug)]
-pub enum SpoolSetError {
-    CreateSpoolSetCacheFailed,
-}
-
-impl fmt::Display for SpoolSetError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use self::SpoolSetError::*;
-        match self {
-            CreateSpoolSetCacheFailed => write!(f, "Failed to spool set create cache."),
-        }
-    }
-}
-
-impl Error for SpoolSetError {
-    fn description(&self) -> &str {
-        "I'm a SpoolSetError."
-    }
-
-    fn cause(&self) -> Option<&Error> {
-        use self::SpoolSetError::*;
-        match self {
-            CreateSpoolSetCacheFailed => None,
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum SpoolError {
     CreateSpoolCacheFailed,
     SledError(SledError<()>),
     IoError(IoError),
+    NoSuchMessage,
 }
 
 impl fmt::Display for SpoolError {
@@ -60,6 +36,7 @@ impl fmt::Display for SpoolError {
             CreateSpoolCacheFailed => write!(f, "Failed to spool set create cache."),
             SledError(x) => x.fmt(f),
             IoError(x) => x.fmt(f),
+            NoSuchMessage => write!(f, "No such message."),
         }
     }
 }
@@ -75,6 +52,7 @@ impl Error for SpoolError {
             CreateSpoolCacheFailed => None,
             SledError(x) => x.source(),
             IoError(x) => x.source(),
+            NoSuchMessage => None,
         }
     }
 }
@@ -88,5 +66,116 @@ impl From<SledError<()>> for SpoolError {
 impl From<IoError> for SpoolError {
     fn from(error: IoError) -> Self {
         SpoolError::IoError(error)
+    }
+}
+
+#[derive(Debug)]
+pub enum SpoolSetError {
+    CreateSpoolSetCacheFailed,
+    SledError(SledError<()>),
+    NoSuchSpoolId,
+    SignatureError(SignatureError),
+}
+
+impl fmt::Display for SpoolSetError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::SpoolSetError::*;
+        match self {
+            CreateSpoolSetCacheFailed => write!(f, "Failed to spool set create cache."),
+            SledError(x) => x.fmt(f),
+            NoSuchSpoolId => write!(f, "Failed to find spool identity."),
+            SignatureError(x) => x.fmt(f),
+        }
+    }
+}
+
+impl Error for SpoolSetError {
+    fn description(&self) -> &str {
+        "I'm a SpoolSetError."
+    }
+
+    fn cause(&self) -> Option<&Error> {
+        use self::SpoolSetError::*;
+        match self {
+            CreateSpoolSetCacheFailed => None,
+            SledError(x) => x.source(),
+            NoSuchSpoolId => None,
+            SignatureError(_x) => None, // XXX no cause or source method available
+        }
+    }
+}
+
+impl From<SledError<()>> for SpoolSetError {
+    fn from(error: SledError<()>) -> Self {
+        SpoolSetError::SledError(error)
+    }
+}
+
+impl From<SignatureError> for SpoolSetError {
+    fn from(error: SignatureError) -> Self {
+        SpoolSetError::SignatureError(error)
+    }
+}
+
+#[derive(Debug)]
+pub enum MultiSpoolError {
+    SpoolSetError(SpoolSetError),
+    SpoolError(SpoolError),
+    SledError(SledError<()>),
+    NoSuchSpool,
+    SignatureError(SignatureError),
+}
+
+impl fmt::Display for MultiSpoolError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::MultiSpoolError::*;
+        match self {
+            SpoolSetError(x) => x.fmt(f),
+            SpoolError(x) => x.fmt(f),
+            SledError(x) => x.fmt(f),
+            NoSuchSpool => write!(f, "Error, no such spool."),
+            SignatureError(x) => x.fmt(f),
+        }
+    }
+}
+
+impl Error for MultiSpoolError {
+    fn description(&self) -> &str {
+        "I'm a MultiSpoolError."
+    }
+
+    fn cause(&self) -> Option<&Error> {
+        use self::MultiSpoolError::*;
+        match self {
+            SpoolSetError(x) => x.source(),
+            SpoolError(x) => x.source(),
+            SledError(x) => x.source(),
+            NoSuchSpool => None,
+            SignatureError(_x) => None, // XXX no cause or source method available
+        }
+    }
+}
+
+impl From<SpoolSetError> for MultiSpoolError {
+    fn from(error: SpoolSetError) -> Self {
+        MultiSpoolError::SpoolSetError(error)
+    }
+}
+
+impl From<SpoolError> for MultiSpoolError {
+    fn from(error: SpoolError) -> Self {
+        MultiSpoolError::SpoolError(error)
+    }
+}
+
+impl From<SledError<()>> for MultiSpoolError {
+    fn from(error: SledError<()>) -> Self {
+        MultiSpoolError::SledError(error)
+    }
+}
+
+impl From<SignatureError> for MultiSpoolError {
+    fn from(error: SignatureError) -> Self {
+        MultiSpoolError::SignatureError(error)
     }
 }
