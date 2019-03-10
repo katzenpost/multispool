@@ -42,16 +42,20 @@ use std::collections::HashMap;
 
 use ::proto::kaetzchen::{Request, Response, Params, Empty};
 use ::proto::kaetzchen_grpc::Kaetzchen;
+use spool::MultiSpool;
+use errors::MultiSpoolError;
 
 pub struct SpoolService {
     params: HashMap<String, String>,
+    multi_spool: MultiSpool,
 }
 
 impl SpoolService {
-    pub fn new() -> SpoolService {
-        SpoolService {
+    pub fn new(base_dir: &String) -> Result<Self, MultiSpoolError> {
+        Ok(SpoolService {
             params: HashMap::new(),
-        }
+            multi_spool: MultiSpool::new(base_dir)?
+        })
     }
 }
 

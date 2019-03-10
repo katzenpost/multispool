@@ -58,6 +58,13 @@ fn main() {
         .version("1.0")
         .author("David Stainton <dawuud@riseup.net>")
         .about("Functions as a plugin to be executed by the Katzenpost server.")
+        .arg(Arg::with_name("data_dir")
+             .short("d")
+             .long("data_dir")
+             .required(true)
+             .value_name("DIR")
+             .help("Sets the data directory.")
+             .takes_value(true))
         .arg(Arg::with_name("log_dir")
              .short("l")
              .long("log_dir")
@@ -67,10 +74,16 @@ fn main() {
              .takes_value(true))
         .get_matches();
     let log_dir = matches.value_of("log_dir").unwrap();
+    let data_dir = String::from(matches.value_of("data_dir").unwrap());
 
     // Ensure log_dir exists and is a directory.
     if !Path::new(log_dir).is_dir() {
         panic!("log_dir must exist and be a directory");
+    }
+
+    // Ensure data_dir exists and is a directory.
+    if !Path::new(&data_dir).is_dir() {
+        panic!("data_dir must exist and be a directory");
     }
 
     // Setup logging.
@@ -85,7 +98,13 @@ fn main() {
         .collect();
     let socket = format!("/tmp/multispool_{}.sock", rand_string);
     server_builder.http.set_unix_addr(socket.to_string()).unwrap();
-    server_builder.add_service(KaetzchenServer::new_service_def(SpoolService::new()));
+    let spool_service = match SpoolService::new(&data_dir) {
+        Ok(x) => x,
+        Err(e) => {
+            panic!(e);
+        },
+    };
+    server_builder.add_service(KaetzchenServer::new_service_def(spool_service));
     server_builder.http.set_cpu_pool_threads(4); // XXX
     let _server = server_builder.build().expect("server");
 
