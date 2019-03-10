@@ -254,11 +254,11 @@ impl MultiSpool {
     pub fn purge_spool(&mut self, spool_id: [u8; SPOOL_ID_SIZE], signature: Signature) -> Result<(), MultiSpoolError> {
         let pub_key = self.spool_set.get_public_key(spool_id)?;
         pub_key.verify(&pub_key.to_bytes(), &signature)?;
-        self.spool_set.delete(spool_id)?;
         {
             let spool = self.get_mut_spool(spool_id)?;
             spool.purge()?;
         }
+        self.spool_set.delete(spool_id)?;
         self.map.remove(&spool_id);
         Ok(())
     }
