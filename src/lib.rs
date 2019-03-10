@@ -32,18 +32,36 @@ extern crate byteorder;
 extern crate sled;
 extern crate ed25519_dalek;
 extern crate rand;
+extern crate serde;
 extern crate sphinxcrypto;
 
 pub mod spool;
 pub mod errors;
 pub mod proto;
+pub mod big_array;
 
 use std::collections::HashMap;
+use std::str;
+use serde::{Deserialize, Deserializer, Serialize};
+use ed25519_dalek::SIGNATURE_LENGTH;
 
 use ::proto::kaetzchen::{Request, Response, Params, Empty};
 use ::proto::kaetzchen_grpc::Kaetzchen;
-use spool::MultiSpool;
+use spool::{MultiSpool, SPOOL_ID_SIZE, MESSAGE_SIZE};
 use errors::MultiSpoolError;
+use big_array::BigArray;
+
+
+#[derive(Deserialize)]
+pub struct SpoolRequest {
+    operation: String,
+    #[serde(with = "BigArray")]
+    spool_id: [u8; SPOOL_ID_SIZE],
+    #[serde(with = "BigArray")]
+    message: [u8; MESSAGE_SIZE],
+    #[serde(with = "BigArray")]
+    signature: [u8; SIGNATURE_LENGTH],
+}
 
 pub struct SpoolService {
     params: HashMap<String, String>,
@@ -62,10 +80,18 @@ impl SpoolService {
 impl Kaetzchen for SpoolService {
 
     fn on_request(&self, _m: grpc::RequestOptions, req: Request) -> grpc::SingleResponse<Response> {
+        info!("request received {}", req.ID); // XXX
         if !req.HasSURB {
             return grpc::SingleResponse::err(grpc::Error::Other("failure, SURB not found with Request"))
         }
-        info!("request received");
+        let spool_request = match serde_cbor::from_slice::<SpoolRequest>(&req.Payload) {
+            Ok(x) => x,
+            Err(_) => {
+                return grpc::SingleResponse::err(grpc::Error::Other("failure, malformed Request, not valid CBOR"))
+            }
+        };
+
+
         let mut r = Response::new();
         r.set_Payload(req.Payload);
         grpc::SingleResponse::completed(r)

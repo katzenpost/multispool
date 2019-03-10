@@ -41,7 +41,7 @@ use errors::{SpoolError, SpoolSetError, MultiSpoolError};
 // Spool constants
 
 /// The size of a message.
-const MESSAGE_SIZE: usize = USER_FORWARD_PAYLOAD_SIZE;
+pub const MESSAGE_SIZE: usize = USER_FORWARD_PAYLOAD_SIZE;
 
 /// The size of a message identity in bytes.
 const MESSAGE_ID_SIZE: usize = 4;
@@ -58,7 +58,7 @@ static END_KEY: &'static [u8] = b"key";
 // SpoolSet constants
 
 /// Spool identity size in bytes.
-const SPOOL_ID_SIZE: usize = 12;
+pub const SPOOL_ID_SIZE: usize = 12;
 
 /// Flush spool set writeback cache every 10 seconds.
 const SPOOL_SET_FLUSH_FREQUENCY: u64 = 10000;
