@@ -23,6 +23,7 @@ extern crate arrayref;
 extern crate ed25519_dalek;
 extern crate sphinxcrypto;
 
+use std::io;
 use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -100,16 +101,41 @@ impl Spool {
             .snapshot_after_ops(1000);
         let db = Db::start(spool_cfg_builder.build())?;
         let meta = db.open_tree(META_TREE_ID.to_vec())?;
-        Ok(Spool {
+        let mut spool = Spool {
             path: PathBuf::from(path.as_ref()),
             last_key: 0,
             db: db,
             meta: meta,
-        })
+        };
+        spool.ensure_consistency()?;
+        spool.last_key = BigEndian::read_u32(&spool.meta.get(END_KEY)?.unwrap());
+        Ok(spool)
+    }
+
+    fn ensure_consistency(&mut self) -> Result<(), SpoolError> {
+        let mut _raw_last_key_option = self.meta.get(END_KEY)?;
+        if _raw_last_key_option.is_none() {
+            if !self.db.is_empty() {
+                return Err(SpoolError::CorruptSpool);
+            }
+        }
+        let mut _raw_last_key = _raw_last_key_option.unwrap();
+        let mut raw_last_key: Vec<u8> = _raw_last_key.to_vec();
+        loop {
+            let mut last_key = BigEndian::read_u32(&raw_last_key);
+            let prev_key = last_key;
+            let raw_prev_key = raw_last_key.to_vec().clone();
+            last_key += 1;
+            BigEndian::write_u32(&mut raw_last_key, last_key); // XXX
+            if !self.db.contains_key(raw_last_key.to_vec())? {
+                self.last_key = prev_key;
+                self.meta.set(END_KEY, raw_prev_key.to_vec())?;
+                return Ok(())
+            }
+        }
     }
 
     pub fn purge(&mut self) -> Result<(), SpoolError> {
-        self.meta.clear()?;
         self.db.drop_tree(META_TREE_ID)?;
         self.db.clear()?;
         *self = Self::new(&self.path)?;
@@ -135,6 +161,7 @@ impl Spool {
 }
 
 /// SpoolSet is essentially a persistent set of spool identities.
+#[derive(Clone)]
 pub struct SpoolSet {
     db: Db,
     meta: Arc<Tree>,
@@ -151,10 +178,28 @@ impl SpoolSet {
         let cache_cfg = cache_cfg_builder.build();
         let db = Db::start(cache_cfg)?;
         let meta = db.open_tree(META_TREE_ID.to_vec())?;
-        Ok(SpoolSet{
+        let mut spool_set = SpoolSet{
             db: db,
             meta: meta,
-        })
+        };
+        spool_set.ensure_consistency()?;
+        Ok(spool_set)
+    }
+
+    fn ensure_consistency(&mut self) -> Result<(), SpoolSetError> {
+        for key_result in self.db.iter().keys() {
+            let key = key_result?;
+            if !self.meta.contains_key(key.clone())? {
+                self.db.del(key)?;
+            }
+        }
+        for key_result in self.meta.iter().keys() {
+            let key = key_result?;
+            if !self.db.contains_key(key.clone())? {
+                self.meta.del(key)?;
+            }
+        }
+        Ok(())
     }
 
     pub fn put(&mut self, spool_id: [u8; SPOOL_ID_SIZE], public_key: PublicKey) -> Result<(), SpoolSetError> {
@@ -198,17 +243,37 @@ fn spool_path(base_dir: &String, spool_id: [u8; SPOOL_ID_SIZE]) -> PathBuf {
     pathbuf
 }
 
+fn remove_corrupt_spool(base_dir: &String, spool_id: [u8; SPOOL_ID_SIZE]) -> io::Result<()> {
+    let path = spool_path(base_dir, spool_id);
+    remove_file(&path)?;
+    Ok(())
+}
+
 impl MultiSpool {
 
     pub fn new(base_dir: &String) -> Result<Self, MultiSpoolError> {
         let spool_set_path = Path::new(base_dir).join("spool_set.sled");
-        let spool_set = SpoolSet::new(&spool_set_path)?;
+        let mut spool_set = SpoolSet::new(&spool_set_path)?;
+        let spool_set_clone = spool_set.clone();
         let mut map = HashMap::new();
-        for spool_id_result in spool_set.keys() {
+        for spool_id_result in spool_set_clone.keys() {
             let raw_spool_id = spool_id_result?;
             let spool_id = *array_ref![raw_spool_id, 0, SPOOL_ID_SIZE];
             let path = spool_path(base_dir, spool_id.clone());
-            map.insert(spool_id, Spool::new(&path)?);
+            let spool_result = Spool::new(&path);
+            if spool_result.is_ok() {
+                map.insert(spool_id, spool_result.ok().unwrap());
+            } else {
+                match spool_result.err().unwrap() {
+                    SpoolError::CorruptSpool => {
+                        spool_set.delete(spool_id)?;
+                        remove_corrupt_spool(base_dir, spool_id)?;
+                    },
+                    e => {
+                        return Err(MultiSpoolError::SpoolError(e))
+                    }
+                }
+            }
         }
         Ok(MultiSpool {
             map: map,

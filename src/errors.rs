@@ -27,6 +27,7 @@ pub enum SpoolError {
     SledError(SledError<()>),
     IoError(IoError),
     NoSuchMessage,
+    CorruptSpool,
 }
 
 impl fmt::Display for SpoolError {
@@ -37,6 +38,7 @@ impl fmt::Display for SpoolError {
             SledError(x) => x.fmt(f),
             IoError(x) => x.fmt(f),
             NoSuchMessage => write!(f, "No such message."),
+            CorruptSpool => write!(f, "Corrupt spool."),
         }
     }
 }
@@ -53,6 +55,7 @@ impl Error for SpoolError {
             SledError(x) => x.source(),
             IoError(x) => x.source(),
             NoSuchMessage => None,
+            CorruptSpool => None,
         }
     }
 }
@@ -124,6 +127,7 @@ pub enum MultiSpoolError {
     SledError(SledError<()>),
     NoSuchSpool,
     SignatureError(SignatureError),
+    IoError(IoError),
 }
 
 impl fmt::Display for MultiSpoolError {
@@ -135,6 +139,7 @@ impl fmt::Display for MultiSpoolError {
             SledError(x) => x.fmt(f),
             NoSuchSpool => write!(f, "Error, no such spool."),
             SignatureError(x) => x.fmt(f),
+            IoError(x) => x.fmt(f),
         }
     }
 }
@@ -152,6 +157,7 @@ impl Error for MultiSpoolError {
             SledError(x) => x.source(),
             NoSuchSpool => None,
             SignatureError(_x) => None, // XXX no cause or source method available
+            IoError(x) => x.source(),
         }
     }
 }
@@ -177,5 +183,11 @@ impl From<SledError<()>> for MultiSpoolError {
 impl From<SignatureError> for MultiSpoolError {
     fn from(error: SignatureError) -> Self {
         MultiSpoolError::SignatureError(error)
+    }
+}
+
+impl From<IoError> for MultiSpoolError {
+    fn from(error: IoError) -> Self {
+        MultiSpoolError::IoError(error)
     }
 }
