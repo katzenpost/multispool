@@ -255,6 +255,8 @@ impl MultiSpool {
         let pub_key = self.spool_set.get_public_key(spool_id)?;
         pub_key.verify(&pub_key.to_bytes(), &signature)?;
         let spool = self.get_mut_spool(spool_id)?;
+        self.map.remove(&spool_id);
+        self.spool_set.delete(spool_id)?;
         spool.purge()?;
         Ok(())
     }
