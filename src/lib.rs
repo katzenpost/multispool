@@ -81,14 +81,14 @@ pub struct SpoolResponse {
 }
 
 pub struct SpoolService {
-    multi_spool: Box<MultiSpool>,
+    multi_spool: MultiSpool,
     params: HashMap<String, String>,
 }
 
 impl SpoolService {
-    pub fn new(base_dir: &String) -> Result<Self, MultiSpoolError> {
+    pub fn new(base_dir: &String, multi_spool: MultiSpool) -> Result<Self, MultiSpoolError> {
         Ok(SpoolService {
-            multi_spool: Box::new(MultiSpool::new(base_dir)?),
+            multi_spool: multi_spool,
             params: HashMap::new(),
         })
     }
@@ -102,13 +102,12 @@ fn error_response(error_message: &'static str) -> SpoolResponse {
     }
 }
 
-fn create_spool(spool_request: SpoolRequest, mut multi_spool: &Box<MultiSpool>) -> SpoolResponse {
+fn create_spool(spool_request: SpoolRequest, multi_spool: &mut MultiSpool) -> SpoolResponse {
     let mut spool_response = SpoolResponse::default();
     if let Ok(signature) = Signature::from_bytes(&spool_request.signature) {
         if let Ok(pub_key) = PublicKey::from_bytes(&spool_request.public_key) {
             let mut csprng: OsRng = OsRng::new().unwrap();
-            let mut m = &mut multi_spool;
-            match m.as_mut().create_spool(pub_key, signature, &mut csprng) {
+            match multi_spool.create_spool(pub_key, signature, &mut csprng) {
                 Ok(spool_id) => {
                     spool_response = SpoolResponse {
                         spool_id: spool_id,
@@ -130,7 +129,7 @@ fn create_spool(spool_request: SpoolRequest, mut multi_spool: &Box<MultiSpool>) 
 }
 
 impl Kaetzchen for SpoolService {
-    fn on_request(&self, _m: grpc::RequestOptions, req: Request) -> grpc::SingleResponse<Response> {
+    fn on_request(&mut self, _m: grpc::RequestOptions, req: Request) -> grpc::SingleResponse<Response> {
         info!("request received {}", req.ID); // XXX
         if !req.HasSURB {
             return grpc::SingleResponse::err(grpc::Error::Other("failure, SURB not found with Request"))
