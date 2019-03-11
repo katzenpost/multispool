@@ -42,43 +42,94 @@ pub mod big_array;
 
 use std::collections::HashMap;
 use std::str;
-use serde::{Deserialize, Deserializer, Serialize};
-use ed25519_dalek::SIGNATURE_LENGTH;
+use serde::{Deserialize, Serialize};
+use rand::Rng;
+use rand::rngs::OsRng;
+use ed25519_dalek::{PublicKey, Signature, SIGNATURE_LENGTH, PUBLIC_KEY_LENGTH};
 
 use ::proto::kaetzchen::{Request, Response, Params, Empty};
 use ::proto::kaetzchen_grpc::Kaetzchen;
-use spool::{MultiSpool, SPOOL_ID_SIZE, MESSAGE_SIZE};
+use spool::{MultiSpool, SPOOL_ID_SIZE, MESSAGE_SIZE, MESSAGE_ID_SIZE};
 use errors::MultiSpoolError;
 use big_array::BigArray;
+
+pub const CREATE_SPOOL_COMMAND: u8 = 0;
+pub const PURGE_SPOOL_COMMAND: u8 = 1;
+pub const APPEND_MESSAGE_COMMAND: u8 = 2;
+pub const RETRIEVE_MESSAGE_COMMAND: u8 = 3;
 
 
 #[derive(Deserialize)]
 pub struct SpoolRequest {
-    operation: String,
+    command: u8,
     #[serde(with = "BigArray")]
     spool_id: [u8; SPOOL_ID_SIZE],
     #[serde(with = "BigArray")]
-    message: [u8; MESSAGE_SIZE],
-    #[serde(with = "BigArray")]
     signature: [u8; SIGNATURE_LENGTH],
+    #[serde(with = "BigArray")]
+    public_key: [u8; PUBLIC_KEY_LENGTH],
+    message_id: [u8; MESSAGE_ID_SIZE],
+    message: Vec<u8>,
+}
+
+#[derive(Serialize, Default)]
+pub struct SpoolResponse {
+    #[serde(with = "BigArray")]
+    spool_id: [u8; SPOOL_ID_SIZE],
+    message: Vec<u8>,
+    status: String,
 }
 
 pub struct SpoolService {
+    multi_spool: Box<MultiSpool>,
     params: HashMap<String, String>,
-    multi_spool: MultiSpool,
 }
 
 impl SpoolService {
     pub fn new(base_dir: &String) -> Result<Self, MultiSpoolError> {
         Ok(SpoolService {
+            multi_spool: Box::new(MultiSpool::new(base_dir)?),
             params: HashMap::new(),
-            multi_spool: MultiSpool::new(base_dir)?
         })
     }
 }
 
-impl Kaetzchen for SpoolService {
+fn error_response(error_message: &'static str) -> SpoolResponse {
+    SpoolResponse{
+        spool_id: [0u8; SPOOL_ID_SIZE],
+        message: vec![],
+        status: error_message.to_string(),
+    }
+}
 
+fn create_spool(spool_request: SpoolRequest, mut multi_spool: &Box<MultiSpool>) -> SpoolResponse {
+    let mut spool_response = SpoolResponse::default();
+    if let Ok(signature) = Signature::from_bytes(&spool_request.signature) {
+        if let Ok(pub_key) = PublicKey::from_bytes(&spool_request.public_key) {
+            let mut csprng: OsRng = OsRng::new().unwrap();
+            let mut m = &mut multi_spool;
+            match m.as_mut().create_spool(pub_key, signature, &mut csprng) {
+                Ok(spool_id) => {
+                    spool_response = SpoolResponse {
+                        spool_id: spool_id,
+                        message: vec![],
+                        status: "OK".to_string(),
+                    }
+                },
+                Err(_) => {
+                    spool_response = error_response("error: invalid create spool failed");
+                },
+            };
+        } else {
+            spool_response = error_response("error: invalid ed25519 public key");
+        }
+    } else {
+        spool_response = error_response("error: invalid signature");
+    }
+    spool_response
+}
+
+impl Kaetzchen for SpoolService {
     fn on_request(&self, _m: grpc::RequestOptions, req: Request) -> grpc::SingleResponse<Response> {
         info!("request received {}", req.ID); // XXX
         if !req.HasSURB {
@@ -91,9 +142,30 @@ impl Kaetzchen for SpoolService {
             }
         };
 
-
         let mut r = Response::new();
-        r.set_Payload(req.Payload);
+        let mut spool_response = SpoolResponse::default();
+        match spool_request.command {
+            CREATE_SPOOL_COMMAND => {
+                spool_response = create_spool(spool_request, &mut self.multi_spool);
+            },
+            PURGE_SPOOL_COMMAND => {
+
+            },
+            APPEND_MESSAGE_COMMAND => {
+
+            },
+            RETRIEVE_MESSAGE_COMMAND => {
+
+            },
+            _ => {
+                spool_response = SpoolResponse{
+                    spool_id: [0u8; SPOOL_ID_SIZE],
+                    message: vec![],
+                    status: "error: no such command".to_string(),
+                };
+            },
+        }
+        r.set_Payload(serde_cbor::to_vec(&spool_response).unwrap());
         grpc::SingleResponse::completed(r)
     }
 

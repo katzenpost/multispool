@@ -44,7 +44,7 @@ use errors::{SpoolError, SpoolSetError, MultiSpoolError};
 pub const MESSAGE_SIZE: usize = USER_FORWARD_PAYLOAD_SIZE;
 
 /// The size of a message identity in bytes.
-const MESSAGE_ID_SIZE: usize = 4;
+pub const MESSAGE_ID_SIZE: usize = 4;
 
 /// The size of a spool in bytes.
 const SPOOL_SIZE: usize = 1000;
