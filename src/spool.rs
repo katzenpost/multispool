@@ -329,7 +329,7 @@ impl MultiSpool {
         let spool_path = spool_path(&self.base_dir, spool_id);
         self.spool_set.put(spool_id, public_key)?;
         self.map.insert(spool_id, Spool::new(&spool_path)?);
-        Err(MultiSpoolError::NoSuchSpool) // XXX
+        Ok(spool_id)
     }
 
     pub fn purge_spool(&mut self, spool_id: [u8; SPOOL_ID_SIZE], signature: Signature) -> Result<(), MultiSpoolError> {
@@ -471,7 +471,7 @@ mod tests {
         assert!(map.contains_key(&spool_id3));
     }
 
-    //#[test]
+    #[test]
     fn simple_multi_spool_test() {
         let dir = tempdir().unwrap();
         let mut multi_spool = MultiSpool::new(&String::from(dir.path().to_str().unwrap())).unwrap();
@@ -479,6 +479,18 @@ mod tests {
         let alice_keypair: Keypair = Keypair::generate(&mut csprng);
         let alice_signature = alice_keypair.sign(&alice_keypair.public.to_bytes());
         let spool_id = multi_spool.create_spool(alice_keypair.public, alice_signature, &mut csprng).unwrap();
+
+        let message1 = [0u8; MESSAGE_SIZE];
+        multi_spool.append_to_spool(spool_id, message1).unwrap();
+        let mut message_id = [0u8; MESSAGE_ID_SIZE];
+        BigEndian::write_u32(&mut message_id, 0);
+        let read_message1 = multi_spool.read_from_spool(spool_id, alice_signature, &message_id).unwrap();
+        assert_eq!(message1[..], read_message1[..]);
+
+        multi_spool.append_to_spool(spool_id, message1).unwrap();
+        BigEndian::write_u32(&mut message_id, 1);
+        let read_message1 = multi_spool.read_from_spool(spool_id, alice_signature, &message_id).unwrap();
+        assert_eq!(message1[..], read_message1[..]);
     }
 
 } // tests
