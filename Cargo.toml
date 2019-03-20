@@ -29,7 +29,9 @@ ed25519-dalek = "1.0.0-pre.1"
 serde = "1.0.89"
 serde_cbor = "0.9.0"
 serde_derive = "1.0.89"
-lazy_static = "1.3.0"
+serde_bytes = "0.10.5"
+hyperlocal = "0.6.0"
+hyper = "0.12.25"
 
 [dependencies.rand]
 version = "0.6"
@@ -39,5 +41,9 @@ features = ["i128_support"]
 protoc-rust-grpc = "0.5.0"
 
 [[bin]]
-name = "spool_server"
+name = "grpc_spool_server"
+test = false
+
+[[bin]]
+name = "cbor_spool_server"
 test = false

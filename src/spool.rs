@@ -68,6 +68,7 @@ pub const SPOOL_SET_SIZE: usize = 10000;
 
 
 /// Spool is an append only message spool.
+#[derive(Clone)]
 pub struct Spool {
     path: PathBuf,
     last_key: u32,
@@ -231,6 +232,7 @@ impl SpoolSet {
 }
 
 /// MultiSpool allows for accessing multiple spools.
+#[derive(Clone)]
 pub struct MultiSpool {
     map: HashMap<[u8; SPOOL_ID_SIZE], Spool>,
     spool_set: SpoolSet,
