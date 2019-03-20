@@ -435,6 +435,28 @@ mod tests {
         spool.purge().unwrap();
     }
 
+    #[test]
+    fn spoolset_basic_test() {
+        let mut csprng = thread_rng();
+        let base_dir = tempdir().unwrap();
+        let set_path = Path::new(base_dir.path()).join("spool_set.sled");
+        let mut spool_set = SpoolSet::new(&set_path).unwrap();
+
+        let alice_keypair: Keypair = Keypair::generate(&mut csprng);
+        let spool_id1 = [0u8; SPOOL_ID_SIZE];
+        spool_set.put(spool_id1, alice_keypair.public).unwrap();
+
+        assert!(spool_set.has(spool_id1).unwrap());
+        spool_set.delete(spool_id1).unwrap();
+        assert!(!spool_set.has(spool_id1).unwrap());
+
+        let mut spool_id2 = [0u8; SPOOL_ID_SIZE];
+        csprng.fill(&mut spool_id2);
+        spool_set.put(spool_id2, alice_keypair.public).unwrap();
+        let remote_pub_key = spool_set.get_public_key(spool_id2).unwrap();
+        assert_eq!(remote_pub_key, alice_keypair.public);
+    }
+
     //#[test]
     fn simple_multi_spool_test() {
         let dir = tempdir().unwrap();
