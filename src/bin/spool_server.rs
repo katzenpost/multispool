@@ -22,6 +22,7 @@ use std::thread;
 
 use multispool::proto::kaetzchen_grpc::KaetzchenServer;
 use multispool::SpoolService;
+use multispool::spool::MultiSpool;
 
 /// CORE_PROTOCOL_VERSION must match the plugin protocol version
 /// that the server's go-plugin library is using.
@@ -98,7 +99,8 @@ fn main() {
         .collect();
     let socket = format!("/tmp/multispool_{}.sock", rand_string);
     server_builder.http.set_unix_addr(socket.to_string()).unwrap();
-    let spool_service = match SpoolService::new(&data_dir) {
+    let multi_spool = MultiSpool::new(&data_dir).unwrap();
+    let spool_service = match SpoolService::new(&data_dir, multi_spool) {
         Ok(x) => x,
         Err(e) => {
             panic!(e);

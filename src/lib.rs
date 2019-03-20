@@ -42,6 +42,7 @@ pub mod big_array;
 
 use std::collections::HashMap;
 use std::str;
+use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use rand::Rng;
 use rand::rngs::OsRng;
@@ -81,14 +82,14 @@ pub struct SpoolResponse {
 }
 
 pub struct SpoolService {
-    multi_spool: MultiSpool,
+    multi_spool: Arc<Mutex<MultiSpool>>,
     params: HashMap<String, String>,
 }
 
 impl SpoolService {
     pub fn new(base_dir: &String, multi_spool: MultiSpool) -> Result<Self, MultiSpoolError> {
         Ok(SpoolService {
-            multi_spool: multi_spool,
+            multi_spool: Arc::new(Mutex::new(multi_spool)),
             params: HashMap::new(),
         })
     }
@@ -129,7 +130,7 @@ fn create_spool(spool_request: SpoolRequest, multi_spool: &mut MultiSpool) -> Sp
 }
 
 impl Kaetzchen for SpoolService {
-    fn on_request(&mut self, _m: grpc::RequestOptions, req: Request) -> grpc::SingleResponse<Response> {
+    fn on_request(&self, _m: grpc::RequestOptions, req: Request) -> grpc::SingleResponse<Response> {
         info!("request received {}", req.ID); // XXX
         if !req.HasSURB {
             return grpc::SingleResponse::err(grpc::Error::Other("failure, SURB not found with Request"))
@@ -145,7 +146,7 @@ impl Kaetzchen for SpoolService {
         let mut spool_response = SpoolResponse::default();
         match spool_request.command {
             CREATE_SPOOL_COMMAND => {
-                spool_response = create_spool(spool_request, &mut self.multi_spool);
+                spool_response = create_spool(spool_request, &mut self.multi_spool.lock().unwrap());
             },
             PURGE_SPOOL_COMMAND => {
 
