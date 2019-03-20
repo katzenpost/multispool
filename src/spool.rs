@@ -476,6 +476,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let mut multi_spool = MultiSpool::new(&String::from(dir.path().to_str().unwrap())).unwrap();
         let mut csprng = thread_rng();
+
         let alice_keypair: Keypair = Keypair::generate(&mut csprng);
         let alice_signature = alice_keypair.sign(&alice_keypair.public.to_bytes());
         let spool_id = multi_spool.create_spool(alice_keypair.public, alice_signature, &mut csprng).unwrap();
@@ -493,4 +494,75 @@ mod tests {
         assert_eq!(message1[..], read_message1[..]);
     }
 
+    #[test]
+    fn create_invalid_signature_test() {
+        let dir = tempdir().unwrap();
+        let mut multi_spool = MultiSpool::new(&String::from(dir.path().to_str().unwrap())).unwrap();
+        let mut csprng = thread_rng();
+
+        let alice_keypair: Keypair = Keypair::generate(&mut csprng);
+        let alice_signature = alice_keypair.sign(&alice_keypair.public.to_bytes());
+        let spool_id = multi_spool.create_spool(alice_keypair.public, alice_signature, &mut csprng).unwrap();
+
+        let bob_keypair: Keypair = Keypair::generate(&mut csprng);
+        let bob_signature = bob_keypair.sign(&bob_keypair.public.to_bytes());
+        multi_spool.create_spool(bob_keypair.public, alice_signature, &mut csprng).is_err();
+    }
+
+    #[test]
+    fn create_twice_test() {
+        let dir = tempdir().unwrap();
+        let mut multi_spool = MultiSpool::new(&String::from(dir.path().to_str().unwrap())).unwrap();
+        let mut csprng = thread_rng();
+
+        let alice_keypair: Keypair = Keypair::generate(&mut csprng);
+        let alice_signature = alice_keypair.sign(&alice_keypair.public.to_bytes());
+        let spool_id1 = multi_spool.create_spool(alice_keypair.public, alice_signature, &mut csprng).unwrap();
+
+        let spool_id2 = multi_spool.create_spool(alice_keypair.public, alice_signature, &mut csprng).unwrap();
+        assert_ne!(spool_id1, spool_id2);
+    }
+
+    #[test]
+    fn spool_permissions_test() {
+        let dir = tempdir().unwrap();
+        let mut multi_spool = MultiSpool::new(&String::from(dir.path().to_str().unwrap())).unwrap();
+        let mut csprng = thread_rng();
+
+        let alice_keypair: Keypair = Keypair::generate(&mut csprng);
+        let alice_signature = alice_keypair.sign(&alice_keypair.public.to_bytes());
+        let spool_id1 = multi_spool.create_spool(alice_keypair.public, alice_signature, &mut csprng).unwrap();
+
+        let bob_keypair: Keypair = Keypair::generate(&mut csprng);
+        let bob_signature = bob_keypair.sign(&bob_keypair.public.to_bytes());
+        let spool_id2 = multi_spool.create_spool(bob_keypair.public, bob_signature, &mut csprng).unwrap();
+        assert_ne!(spool_id1, spool_id2);
+
+        let message1 = [0u8; MESSAGE_SIZE];
+        let mut message_id1 = [0u8; MESSAGE_ID_SIZE];
+        multi_spool.append_to_spool(spool_id1, message1).unwrap();
+        BigEndian::write_u32(&mut message_id1, 0);
+        let read_message1 = multi_spool.read_from_spool(spool_id1, alice_signature, &message_id1).unwrap();
+        assert_eq!(message1[..], read_message1[..]);
+        multi_spool.read_from_spool(spool_id2, alice_signature, &message_id1).is_err();
+
+        let message2 = [9u8; MESSAGE_SIZE];
+        let mut message_id2 = [0u8; MESSAGE_ID_SIZE];
+        BigEndian::write_u32(&mut message_id2, 0);
+        multi_spool.append_to_spool(spool_id2, message2).unwrap();
+        let mut read_message2 = multi_spool.read_from_spool(spool_id2, bob_signature, &message_id1).unwrap();
+        assert_eq!(message2[..], read_message2[..]);
+        assert_ne!(message1[..], read_message2[..]);
+
+        multi_spool.read_from_spool(spool_id2, alice_signature, &message_id1).is_err();
+        multi_spool.read_from_spool(spool_id1, bob_signature, &message_id1).is_err();
+
+        multi_spool.purge_spool(spool_id2, alice_signature).is_err();
+        multi_spool.purge_spool(spool_id2, bob_signature).unwrap();
+        multi_spool.append_to_spool(spool_id2, message2).is_err();
+        multi_spool.append_to_spool(spool_id1, message2).unwrap();
+        BigEndian::write_u32(&mut message_id2, 1);
+        read_message2 = multi_spool.read_from_spool(spool_id1, alice_signature, &message_id2).unwrap();
+        assert_eq!(message2[..], read_message2[..]);
+    }
 } // tests
