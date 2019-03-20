@@ -455,6 +455,20 @@ mod tests {
         spool_set.put(spool_id2, alice_keypair.public).unwrap();
         let remote_pub_key = spool_set.get_public_key(spool_id2).unwrap();
         assert_eq!(remote_pub_key, alice_keypair.public);
+
+        let mut spool_id3 = [0u8; SPOOL_ID_SIZE];
+        csprng.fill(&mut spool_id3);
+        spool_set.put(spool_id3, alice_keypair.public).unwrap();
+
+        //let mut ids = vec![];
+        let mut map: HashMap<[u8; SPOOL_ID_SIZE], bool> = HashMap::new();
+        for key in spool_set.keys() {
+            let mut id = [0u8; SPOOL_ID_SIZE];
+            id[..].clone_from_slice(&key.unwrap());
+            map.insert(id, true);
+        }
+        assert!(map.contains_key(&spool_id2));
+        assert!(map.contains_key(&spool_id3));
     }
 
     //#[test]
