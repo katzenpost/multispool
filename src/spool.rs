@@ -71,7 +71,7 @@ pub const SPOOL_SET_SIZE: usize = 10000;
 #[derive(Clone)]
 pub struct Spool {
     path: PathBuf,
-    last_key: u32,
+    last_key: Option<u32>,
     db: Db,
     meta: Arc<Tree>,
 }
@@ -104,16 +104,24 @@ impl Spool {
         let meta = db.open_tree(META_TREE_ID.to_vec())?;
         let mut spool = Spool {
             path: PathBuf::from(path.as_ref()),
-            last_key: 0,
+            last_key: None,
             db: db,
             meta: meta,
         };
         spool.ensure_consistency()?;
-        spool.last_key = BigEndian::read_u32(&spool.meta.get(END_KEY)?.unwrap());
+        let end_key_res = spool.meta.get(END_KEY).unwrap();
+        if end_key_res.is_none() {
+            spool.last_key = None;
+        } else {
+            spool.last_key = Some(BigEndian::read_u32(&end_key_res.unwrap()));
+        }
         Ok(spool)
     }
 
     fn ensure_consistency(&mut self) -> Result<(), SpoolError> {
+        if self.meta.get(END_KEY)?.is_none() {
+            return Ok(());
+        }
         let mut _raw_last_key_option = self.meta.get(END_KEY)?;
         if _raw_last_key_option.is_none() {
             if !self.db.is_empty() {
@@ -129,7 +137,7 @@ impl Spool {
             last_key += 1;
             BigEndian::write_u32(&mut raw_last_key, last_key); // XXX
             if !self.db.contains_key(raw_last_key.to_vec())? {
-                self.last_key = prev_key;
+                self.last_key = Some(prev_key);
                 self.meta.set(END_KEY, raw_prev_key.to_vec())?;
                 return Ok(())
             }
@@ -139,18 +147,24 @@ impl Spool {
     pub fn purge(&mut self) -> Result<(), SpoolError> {
         self.db.drop_tree(META_TREE_ID)?;
         self.db.clear()?;
-        *self = Self::new(&self.path)?;
-        remove_file(&self.path)?;
+        self.last_key = Some(0);
         Ok(())
     }
 
     pub fn append(&mut self, message: [u8; MESSAGE_SIZE]) -> Result<(), SpoolError> {
-        self.last_key += 1;
+        if self.last_key.is_some() {
+            self.last_key = Some(self.last_key.unwrap() + 1);
+            let mut _last_key = [0; 4];
+            BigEndian::write_u32(&mut _last_key, self.last_key.unwrap());
+            self.db.set(_last_key, message.to_vec())?;
+            self.meta.merge(END_KEY, _last_key.to_vec())?;
+            return Ok(());
+        }
+        self.last_key = Some(0);
         let mut _last_key = [0; 4];
-        BigEndian::write_u32(&mut _last_key, self.last_key);
         self.db.set(_last_key, message.to_vec())?;
         self.meta.merge(END_KEY, _last_key.to_vec())?;
-        Ok(())
+        return Ok(());
     }
 
     pub fn read(&self, message_id: &[u8; MESSAGE_ID_SIZE]) -> Result<[u8; MESSAGE_SIZE], SpoolError> {
@@ -349,3 +363,86 @@ impl MultiSpool {
         Ok(self.get_spool(spool_id)?.read(message_id)?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    extern crate rand;
+    extern crate tempfile;
+
+    use std::assert_eq;
+    use std::thread;
+    use rand::rngs::OsRng;
+    use rand::{seq::SliceRandom, thread_rng};
+    use rand::CryptoRng;
+    use rand::Rng;
+    use ed25519_dalek::Keypair;
+    use ed25519_dalek::Signature;
+    use self::tempfile::tempdir;
+    use super::*;
+
+
+    #[test]
+    fn spool_append_read_test() {
+        let mut csprng = thread_rng();
+        let base_dir = tempdir().unwrap();
+        let mut spool_id = [0u8; SPOOL_ID_SIZE];
+        csprng.fill(&mut spool_id);
+        let path = Path::new(base_dir.path()).join(format!("spool.{}.sled", base64::encode(&spool_id)));
+        let pathbuf: PathBuf = path.to_owned();
+        let mut spool = Spool::new(&pathbuf).unwrap();
+
+        // message 1
+        let mut message1 = [0u8; MESSAGE_SIZE];
+        csprng.fill(&mut message1[..]);
+        spool.append(message1).unwrap();
+
+        let mut message_id = [0u8; MESSAGE_ID_SIZE];
+        BigEndian::write_u32(&mut message_id, 0);
+        let read_message1 = spool.read(&message_id).unwrap();
+        assert_eq!(message1[..], read_message1[..]);
+
+        // message 2
+        let mut message2 = [0u8; MESSAGE_SIZE];
+        csprng.fill(&mut message2[..]);
+        spool.append(message2).unwrap();
+
+        let mut message_id = [0u8; MESSAGE_ID_SIZE];
+        BigEndian::write_u32(&mut message_id, 1);
+        let read_message2 = spool.read(&message_id).unwrap();
+        assert_eq!(message2[..], read_message2[..]);
+    }
+
+    #[test]
+    fn spool_purge_test() {
+        let mut csprng = thread_rng();
+        let base_dir = tempdir().unwrap();
+        let mut spool_id = [0u8; SPOOL_ID_SIZE];
+        csprng.fill(&mut spool_id);
+        let path = Path::new(base_dir.path()).join(format!("spool.{}.sled", base64::encode(&spool_id)));
+        let pathbuf: PathBuf = path.to_owned();
+        let mut spool = Spool::new(&pathbuf).unwrap();
+
+        // message 1
+        let mut message1 = [0u8; MESSAGE_SIZE];
+        csprng.fill(&mut message1[..]);
+        spool.append(message1).unwrap();
+
+        let mut message_id = [0u8; MESSAGE_ID_SIZE];
+        BigEndian::write_u32(&mut message_id, 0);
+        let read_message1 = spool.read(&message_id).unwrap();
+        assert_eq!(message1[..], read_message1[..]);
+
+        spool.purge().unwrap();
+    }
+
+    //#[test]
+    fn simple_multi_spool_test() {
+        let dir = tempdir().unwrap();
+        let mut multi_spool = MultiSpool::new(&String::from(dir.path().to_str().unwrap())).unwrap();
+        let mut csprng = thread_rng();
+        let alice_keypair: Keypair = Keypair::generate(&mut csprng);
+        let alice_signature = alice_keypair.sign(&alice_keypair.public.to_bytes());
+        let spool_id = multi_spool.create_spool(alice_keypair.public, alice_signature, &mut csprng).unwrap();
+    }
+
+} // tests
