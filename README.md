@@ -1,9 +1,10 @@
 
 # multispool [![](https://travis-ci.org/katzenpost/multispool.png?branch=master)](https://www.travis-ci.org/katzenpost/multispool) [![](https://img.shields.io/crates/v/multispool.svg)](https://crates.io/crates/multispool) [![](https://docs.rs/multispool/badge.svg)](https://docs.rs/multispool/)
 
-The multispool server functions as a gRPC plugin for the Katzenpost mix server.
-That is to say, the service it adds to the mix network is that of multiple spools.
-This allows remote mixnet users to create, destroy, append and read spools.
+The multispool server functions as a plugin for the Katzenpost mix
+server. Multispool allows remote mixnet clients to create, destroy,
+append and read multiple spools. Currently it works with two
+Katzenpost plugin systems, GRPC and, CBOR+HTTP.
 
 
 ### katzenpost server configuration example
