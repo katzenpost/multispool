@@ -43,17 +43,12 @@ pub mod errors;
 pub mod proto;
 pub mod big_array;
 
-use std::collections::HashMap;
 use std::str;
-use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
-use rand::Rng;
 use rand::rngs::OsRng;
 use ed25519_dalek::{PublicKey, Signature, SIGNATURE_LENGTH, PUBLIC_KEY_LENGTH};
 
-use ::proto::kaetzchen::{Request, Response, Params, Empty};
-use ::proto::kaetzchen_grpc::Kaetzchen;
-use spool::{MultiSpool, SPOOL_ID_SIZE, MESSAGE_SIZE, MESSAGE_ID_SIZE};
+use spool::{MultiSpool, SPOOL_ID_SIZE, MESSAGE_ID_SIZE};
 use errors::MultiSpoolError;
 use big_array::BigArray;
 
