@@ -43,7 +43,7 @@ use serde::{Deserialize, Serialize};
 use rand::rngs::OsRng;
 use ed25519_dalek::{PublicKey, Signature, SIGNATURE_LENGTH, PUBLIC_KEY_LENGTH};
 
-use spool::{MultiSpool, SPOOL_ID_SIZE, MESSAGE_ID_SIZE};
+use spool::{MultiSpool, SPOOL_ID_SIZE, MESSAGE_ID_SIZE, MESSAGE_SIZE};
 use errors::MultiSpoolError;
 use big_array::BigArray;
 
@@ -102,6 +102,77 @@ pub fn create_spool(spool_request: SpoolRequest, multi_spool: &mut MultiSpool) -
                     spool_response = error_response("error: invalid create spool failed");
                 },
             };
+        } else {
+            spool_response = error_response("error: invalid ed25519 public key");
+        }
+    } else {
+        spool_response = error_response("error: invalid signature");
+    }
+    spool_response
+}
+
+pub fn purge_spool(spool_request: SpoolRequest, multi_spool: &mut MultiSpool) -> SpoolResponse {
+    let mut spool_response = SpoolResponse::default();
+    if let Ok(signature) = Signature::from_bytes(&spool_request.signature) {
+        if let Ok(pub_key) = PublicKey::from_bytes(&spool_request.public_key) {
+            let mut csprng: OsRng = OsRng::new().unwrap();
+            match multi_spool.purge_spool(spool_request.spool_id, signature) {
+                Ok(_) => {
+                    spool_response = SpoolResponse {
+                        spool_id: spool_request.spool_id,
+                        message: vec![],
+                        status: "OK".to_string(),
+                    }
+                },
+                Err(_) => {
+                    spool_response = error_response("error: purge spool failed");
+                },
+            }
+        } else {
+            spool_response = error_response("error: invalid ed25519 public key");
+        }
+    } else {
+        spool_response = error_response("error: invalid signature");
+    }
+    spool_response
+}
+
+pub fn append_to_spool(spool_request: SpoolRequest, multi_spool: &mut MultiSpool) -> SpoolResponse {
+    let mut spool_response = SpoolResponse::default();
+    let mut message = [0u8; MESSAGE_SIZE];
+    message.copy_from_slice(&spool_request.message);
+    match multi_spool.append_to_spool(spool_request.spool_id, message) {
+        Ok(_) => {
+            spool_response = SpoolResponse {
+                spool_id: spool_request.spool_id,
+                message: vec![],
+                status: "OK".to_string(),
+            }
+                },
+        Err(_) => {
+            spool_response = error_response("error: purge spool failed");
+        },
+    }
+    spool_response
+}
+
+pub fn read_from_spool(spool_request: SpoolRequest, multi_spool: &mut MultiSpool) -> SpoolResponse {
+    let mut spool_response = SpoolResponse::default();
+    if let Ok(signature) = Signature::from_bytes(&spool_request.signature) {
+        if let Ok(pub_key) = PublicKey::from_bytes(&spool_request.public_key) {
+            let mut csprng: OsRng = OsRng::new().unwrap();
+            match multi_spool.read_from_spool(spool_request.spool_id, signature, &spool_request.message_id) {
+                Ok(response_message) => {
+                    spool_response = SpoolResponse {
+                        spool_id: spool_request.spool_id,
+                        message: response_message.to_vec(),
+                        status: "OK".to_string(),
+                    }
+                },
+                Err(_) => {
+                    spool_response = error_response("error: purge spool failed");
+                },
+            }
         } else {
             spool_response = error_response("error: invalid ed25519 public key");
         }

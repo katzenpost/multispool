@@ -34,7 +34,9 @@ use serde::{Deserialize, Serialize};
 use serde_cbor::from_slice;
 
 use multispool::spool::MultiSpool;
-use multispool::{SpoolRequest, SpoolResponse, CREATE_SPOOL_COMMAND, PURGE_SPOOL_COMMAND,
+use multispool::{SpoolRequest, SpoolResponse, create_spool, purge_spool, append_to_spool,
+                 read_from_spool,
+                 CREATE_SPOOL_COMMAND, PURGE_SPOOL_COMMAND,
                  APPEND_MESSAGE_COMMAND, RETRIEVE_MESSAGE_COMMAND};
 
 
@@ -56,19 +58,19 @@ pub struct Response {
 
 type Parameters = HashMap<String, String>;
 
-fn handle_spool_request(spool_request: SpoolRequest, multi_spool: MultiSpool) -> SpoolResponse {
+fn handle_spool_request(spool_request: SpoolRequest, mut multi_spool: MultiSpool) -> SpoolResponse {
     match spool_request.command {
         CREATE_SPOOL_COMMAND => {
-            return SpoolResponse::default() // XXX
+            return create_spool(spool_request, &mut multi_spool)
         },
         PURGE_SPOOL_COMMAND => {
-            return SpoolResponse::default() // XXX
+            return purge_spool(spool_request, &mut multi_spool)
         },
         APPEND_MESSAGE_COMMAND => {
-            return SpoolResponse::default() // XXX
+            return append_to_spool(spool_request, &mut multi_spool)
         },
         RETRIEVE_MESSAGE_COMMAND => {
-            return SpoolResponse::default() // XXX
+            return read_from_spool(spool_request, &mut multi_spool)
         }
         _ => {
             return SpoolResponse{
