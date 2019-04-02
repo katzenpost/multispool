@@ -27,10 +27,6 @@
 extern crate serde_bytes;
 
 extern crate log4rs;
-extern crate protobuf;
-extern crate grpc;
-extern crate tls_api;
-extern crate tls_api_stub;
 extern crate base64;
 extern crate byteorder;
 extern crate sled;
@@ -40,7 +36,6 @@ extern crate sphinxcrypto;
 
 pub mod spool;
 pub mod errors;
-pub mod proto;
 pub mod big_array;
 
 use std::str;

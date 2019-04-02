@@ -34,7 +34,8 @@ use serde::{Deserialize, Serialize};
 use serde_cbor::from_slice;
 
 use multispool::spool::MultiSpool;
-use multispool::{SpoolRequest, SpoolResponse};
+use multispool::{SpoolRequest, SpoolResponse, CREATE_SPOOL_COMMAND, PURGE_SPOOL_COMMAND,
+                 APPEND_MESSAGE_COMMAND, RETRIEVE_MESSAGE_COMMAND};
 
 
 #[derive(Deserialize)]
@@ -56,7 +57,27 @@ pub struct Response {
 type Parameters = HashMap<String, String>;
 
 fn handle_spool_request(spool_request: SpoolRequest, multi_spool: MultiSpool) -> SpoolResponse {
-    SpoolResponse::default()
+    match spool_request.command {
+        CREATE_SPOOL_COMMAND => {
+            return SpoolResponse::default() // XXX
+        },
+        PURGE_SPOOL_COMMAND => {
+            return SpoolResponse::default() // XXX
+        },
+        APPEND_MESSAGE_COMMAND => {
+            return SpoolResponse::default() // XXX
+        },
+        RETRIEVE_MESSAGE_COMMAND => {
+            return SpoolResponse::default() // XXX
+        }
+        _ => {
+            return SpoolResponse{
+                spool_id: spool_request.spool_id,
+                message: vec![],
+                status: String::from("error, invalid command"),
+            }
+        },
+    }
 }
 
 fn init_logger(log_dir: &str) {
@@ -190,7 +211,7 @@ fn main() {
         .collect();
     let socket_path = format!("/tmp/multispool_{}.sock", rand_string);
     let svr = hyperlocal::server::Server::bind(&socket_path, move || {
-        let mut multi_spool = MultiSpool::new(&data_dir).unwrap();
+        let multi_spool = MultiSpool::new(&data_dir).unwrap();
         service_fn(move |req| request_handler(req, multi_spool.clone()))
     }).unwrap();
     println!("{}", socket_path);
