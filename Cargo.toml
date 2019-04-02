@@ -32,12 +32,12 @@ serde_bytes = "0.10.5"
 hyperlocal = "0.6.0"
 hyper = "0.12.25"
 
-[dev-dependencies]
-tempfile = "3.0.5"
-
-[dev-dependencies.rand]
+[dependencies.rand]
 version = "0.6"
 features = ["i128_support"]
+
+[dev-dependencies]
+tempfile = "3.0.5"
 
 [build-dependencies]
 protoc-rust-grpc = "0.5.0"
