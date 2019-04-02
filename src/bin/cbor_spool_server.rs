@@ -34,6 +34,7 @@ use serde::{Deserialize, Serialize};
 use serde_cbor::from_slice;
 
 use multispool::spool::MultiSpool;
+use multispool::{SpoolRequest, SpoolResponse};
 
 
 #[derive(Deserialize)]
@@ -45,7 +46,6 @@ pub struct Request {
     HasSURB: bool,
 }
 
-
 #[derive(Serialize)]
 #[allow(non_snake_case)]
 pub struct Response {
@@ -53,8 +53,11 @@ pub struct Response {
     Payload: Vec<u8>,
 }
 
-
 type Parameters = HashMap<String, String>;
+
+fn handle_spool_request(spool_request: SpoolRequest, multi_spool: MultiSpool) -> SpoolResponse {
+    SpoolResponse::default()
+}
 
 fn init_logger(log_dir: &str) {
     use log4rs::append::file::FileAppender;
@@ -79,7 +82,7 @@ fn init_logger(log_dir: &str) {
 
 type BoxFut = Box<Future<Item = hyper::Response<hyper::Body>, Error = hyper::Error> + Send>;
 
-fn request_handler(req: hyper::Request<Body>, multi_spool: &Arc<MultiSpool>) -> BoxFut {
+fn request_handler(req: hyper::Request<Body>, multi_spool: MultiSpool) -> BoxFut {
     let mut response = hyper::Response::new(Body::empty());
     match (req.method(), req.uri().path()) {
         (&Method::POST, "/parameters") => {
@@ -87,15 +90,34 @@ fn request_handler(req: hyper::Request<Body>, multi_spool: &Arc<MultiSpool>) -> 
             let cbor_params = serde_cbor::to_vec(&params).unwrap();
             *response.body_mut() = Body::from(cbor_params);
         }
-
         (&Method::POST, "/request") => {
             let _response = req.into_body().concat2().map(move |chunk| {
                 let body = chunk.iter().cloned().collect::<Vec<u8>>();
                 let body_result: Result<Request, serde_cbor::error::Error> = serde_cbor::from_slice(&body.to_vec());
                 match body_result {
                     Ok(request) =>{
+                        let mut spool_response = SpoolResponse::default();
+                        let request_result: Result<SpoolRequest, serde_cbor::error::Error> = serde_cbor::from_slice(&request.Payload);
+                        match request_result {
+                            Ok(spool_request) => {
+                                spool_response = handle_spool_request(spool_request, multi_spool);
+                            },
+                            Err(e) => {
+                                info!("FAILED to deserialize CBOR SpoolRequest: {}", e);
+                            },
+                        }
+                        let spool_response_result = serde_cbor::to_vec(&spool_response);
+                        let mut response_payload = vec![];
+                        match spool_response_result {
+                            Ok(x) => {
+                                response_payload = x;
+                            },
+                            Err(e) => {
+                                info!("FAILED to serialize CBOR SpoolResponse: {}", e);
+                            },
+                        }
                         let inner_response = Response {
-                            Payload: request.Payload,
+                            Payload: response_payload,
                         };
                         let cbor_response_result = serde_cbor::to_vec(&inner_response);
                         match cbor_response_result {
@@ -103,27 +125,25 @@ fn request_handler(req: hyper::Request<Body>, multi_spool: &Arc<MultiSpool>) -> 
                                 *response.body_mut() = Body::from(cbor_response);
                                 return response;
                             },
-                            Err(_e) => {
-                                info!("FAILED to serialize CBOR response: {}", _e);
+                            Err(e) => {
+                                info!("FAILED to serialize CBOR response: {}", e);
                                 return response;
                             },
                         }
                     },
-                    Err(_e) => {
-                        info!("FAILED to deserialize CBOR request: {}", _e);
+                    Err(e) => {
+                        info!("FAILED to deserialize CBOR request: {}", e);
                         return response;
                     },
                 }
             });
             return Box::new(_response);
         }
-
         // The 404 Not Found route...
         _ => {
             *response.status_mut() = StatusCode::NOT_FOUND;
         }
     };
-
     Box::new(future::ok(response))
 }
 
@@ -169,12 +189,9 @@ fn main() {
         .take(10)
         .collect();
     let socket_path = format!("/tmp/multispool_{}.sock", rand_string);
-
-    
-    let multi_spool = Arc::new(MultiSpool::new(&data_dir).unwrap());
     let svr = hyperlocal::server::Server::bind(&socket_path, move || {
-        let inner = Arc::clone(&multi_spool);
-        service_fn(move |req| request_handler(req, &inner))
+        let mut multi_spool = MultiSpool::new(&data_dir).unwrap();
+        service_fn(move |req| request_handler(req, multi_spool.clone()))
     }).unwrap();
     println!("{}", socket_path);
     svr.run().unwrap();
