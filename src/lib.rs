@@ -156,7 +156,7 @@ pub fn append_to_spool(spool_request: SpoolRequest, multi_spool: &mut MultiSpool
     spool_response
 }
 
-pub fn read_from_spool(spool_request: SpoolRequest, multi_spool: &mut MultiSpool) -> SpoolResponse {
+pub fn read_from_spool(spool_request: SpoolRequest, multi_spool: &MultiSpool) -> SpoolResponse {
     let mut spool_response = SpoolResponse::default();
     if let Ok(signature) = Signature::from_bytes(&spool_request.signature) {
         if let Ok(pub_key) = PublicKey::from_bytes(&spool_request.public_key) {

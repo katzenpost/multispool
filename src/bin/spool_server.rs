@@ -70,7 +70,7 @@ fn handle_spool_request(spool_request: SpoolRequest, mut multi_spool: MultiSpool
             return append_to_spool(spool_request, &mut multi_spool)
         },
         RETRIEVE_MESSAGE_COMMAND => {
-            return read_from_spool(spool_request, &mut multi_spool)
+            return read_from_spool(spool_request, &multi_spool)
         }
         _ => {
             return SpoolResponse{
