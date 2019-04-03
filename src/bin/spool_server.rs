@@ -59,7 +59,7 @@ pub struct Response {
 type Parameters = HashMap<String, String>;
 
 fn handle_spool_request(spool_request: SpoolRequest, mut multi_spool: MultiSpool) -> SpoolResponse {
-    match spool_request.command {
+    match spool_request.Command {
         CREATE_SPOOL_COMMAND => {
             return create_spool(spool_request, &mut multi_spool)
         },
@@ -74,9 +74,9 @@ fn handle_spool_request(spool_request: SpoolRequest, mut multi_spool: MultiSpool
         }
         _ => {
             return SpoolResponse{
-                spool_id: spool_request.spool_id,
-                message: vec![],
-                status: String::from("error, invalid command"),
+                SpoolID: spool_request.SpoolID,
+                Message: vec![],
+                Status: String::from("error, invalid command"),
             }
         },
     }
