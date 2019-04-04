@@ -11,6 +11,7 @@ extern crate hyper;
 extern crate futures;
 extern crate rand;
 extern crate multispool;
+extern crate byteorder;
 
 use std::path::Path;
 use std::str;
@@ -30,6 +31,7 @@ use hyper::body::Payload;
 use hyper::Body;
 use rand::{thread_rng, Rng};
 use rand::distributions::Alphanumeric;
+use byteorder::{ByteOrder, BigEndian};
 use serde::{Deserialize, Serialize};
 use serde_cbor::from_slice;
 
@@ -98,7 +100,7 @@ fn init_logger(log_dir: &str) {
 
     let config = Config::builder()
         .appender(Appender::builder().build("requests", Box::new(requests)))
-        .build(Root::builder().appender("requests").build(LevelFilter::Info))
+        .build(Root::builder().appender("requests").build(LevelFilter::Debug))
         .unwrap();
     let _handle = log4rs::init_config(config).unwrap();
 }
@@ -106,6 +108,7 @@ fn init_logger(log_dir: &str) {
 type BoxFut = Box<Future<Item = hyper::Response<hyper::Body>, Error = hyper::Error> + Send>;
 
 fn request_handler(req: hyper::Request<Body>, multi_spool: MultiSpool) -> BoxFut {
+    info!("request_handler");
     let mut response = hyper::Response::new(Body::empty());
     match (req.method(), req.uri().path()) {
         (&Method::POST, "/parameters") => {
@@ -114,13 +117,17 @@ fn request_handler(req: hyper::Request<Body>, multi_spool: MultiSpool) -> BoxFut
             *response.body_mut() = Body::from(cbor_params);
         }
         (&Method::POST, "/request") => {
+            info!("POST /request");
             let _response = req.into_body().concat2().map(move |chunk| {
                 let body = chunk.iter().cloned().collect::<Vec<u8>>();
                 let body_result: Result<Request, serde_cbor::error::Error> = serde_cbor::from_slice(&body.to_vec());
                 match body_result {
                     Ok(request) =>{
+                        info!("decoded CBOR Request");
                         let mut spool_response = SpoolResponse::default();
-                        let request_result: Result<SpoolRequest, serde_cbor::error::Error> = serde_cbor::from_slice(&request.Payload);
+                        let spool_request_len = BigEndian::read_u32(&request.Payload[..4]);
+                        info!("big endian encoded raw SpoolRequest length is {}", spool_request_len);
+                        let request_result: Result<SpoolRequest, serde_cbor::error::Error> = serde_cbor::from_slice(&request.Payload[4..spool_request_len as usize + 4]);
                         match request_result {
                             Ok(spool_request) => {
                                 spool_response = handle_spool_request(spool_request, multi_spool);

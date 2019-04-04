@@ -17,15 +17,10 @@
 //! Multi-Spool protocol
 
 #[macro_use] extern crate log;
-
 #[macro_use] extern crate arrayref;
-
 #[macro_use] extern crate serde_derive;
-
 #[macro_use] extern crate serde;
-
 extern crate serde_bytes;
-
 extern crate log4rs;
 extern crate base64;
 extern crate byteorder;
@@ -36,7 +31,6 @@ extern crate sphinxcrypto;
 
 pub mod spool;
 pub mod errors;
-pub mod big_array;
 
 use std::str;
 use serde::{Deserialize, Serialize};
@@ -45,7 +39,6 @@ use ed25519_dalek::{PublicKey, Signature, SIGNATURE_LENGTH, PUBLIC_KEY_LENGTH};
 
 use spool::{MultiSpool, SPOOL_ID_SIZE, MESSAGE_ID_SIZE, MESSAGE_SIZE};
 use errors::MultiSpoolError;
-use big_array::BigArray;
 
 pub const CREATE_SPOOL_COMMAND: u8 = 0;
 pub const PURGE_SPOOL_COMMAND: u8 = 1;
@@ -57,14 +50,14 @@ pub const RETRIEVE_MESSAGE_COMMAND: u8 = 3;
 #[allow(non_snake_case)]
 pub struct SpoolRequest {
     pub Command: u8,
-    #[serde(with = "BigArray")]
-    pub SpoolID: [u8; SPOOL_ID_SIZE],
-    #[serde(with = "BigArray")]
-    pub Signature: [u8; SIGNATURE_LENGTH],
-    #[serde(with = "BigArray")]
-    pub PublicKey: [u8; PUBLIC_KEY_LENGTH],
-    #[serde(with = "BigArray")]
-    pub MessageID: [u8; MESSAGE_ID_SIZE],
+    #[serde(with = "serde_bytes")]
+    pub SpoolID: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub Signature: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub PublicKey: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub MessageID: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub Message: Vec<u8>,
 }
@@ -72,8 +65,8 @@ pub struct SpoolRequest {
 #[derive(Serialize, Default)]
 #[allow(non_snake_case)]
 pub struct SpoolResponse {
-    #[serde(with = "BigArray")]
-    pub SpoolID: [u8; SPOOL_ID_SIZE],
+    #[serde(with = "serde_bytes")]
+    pub SpoolID: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub Message: Vec<u8>,
     pub Status: String,
@@ -81,7 +74,7 @@ pub struct SpoolResponse {
 
 fn error_response(error_message: &'static str) -> SpoolResponse {
     SpoolResponse{
-        SpoolID: [0u8; SPOOL_ID_SIZE],
+        SpoolID: vec![],
         Message: vec![],
         Status: error_message.to_string(),
     }
@@ -95,7 +88,7 @@ pub fn create_spool(spool_request: SpoolRequest, multi_spool: &mut MultiSpool) -
             match multi_spool.create_spool(pub_key, signature, &mut csprng) {
                 Ok(spool_id) => {
                     spool_response = SpoolResponse {
-                        SpoolID: spool_id,
+                        SpoolID: spool_id[..].to_vec(),
                         Message: vec![],
                         Status: "OK".to_string(),
                     }
@@ -118,7 +111,9 @@ pub fn purge_spool(spool_request: SpoolRequest, multi_spool: &mut MultiSpool) ->
     if let Ok(signature) = Signature::from_bytes(&spool_request.Signature) {
         if let Ok(pub_key) = PublicKey::from_bytes(&spool_request.PublicKey) {
             let mut csprng: OsRng = OsRng::new().unwrap();
-            match multi_spool.purge_spool(spool_request.SpoolID, signature) {
+            let mut spool_id = [0u8; SPOOL_ID_SIZE];
+            spool_id[..].clone_from_slice(&spool_request.SpoolID);
+            match multi_spool.purge_spool(spool_id, signature) {
                 Ok(_) => {
                     spool_response = SpoolResponse {
                         SpoolID: spool_request.SpoolID,
@@ -143,7 +138,9 @@ pub fn append_to_spool(spool_request: SpoolRequest, multi_spool: &mut MultiSpool
     let mut spool_response = SpoolResponse::default();
     let mut message = [0u8; MESSAGE_SIZE];
     message.copy_from_slice(&spool_request.Message);
-    match multi_spool.append_to_spool(spool_request.SpoolID, message) {
+    let mut spool_id = [0u8; SPOOL_ID_SIZE];
+    spool_id[..].clone_from_slice(&spool_request.SpoolID);
+    match multi_spool.append_to_spool(spool_id, message) {
         Ok(_) => {
             spool_response = SpoolResponse {
                 SpoolID: spool_request.SpoolID,
@@ -163,7 +160,11 @@ pub fn read_from_spool(spool_request: SpoolRequest, multi_spool: &MultiSpool) ->
     if let Ok(signature) = Signature::from_bytes(&spool_request.Signature) {
         if let Ok(pub_key) = PublicKey::from_bytes(&spool_request.PublicKey) {
             let mut csprng: OsRng = OsRng::new().unwrap();
-            match multi_spool.read_from_spool(spool_request.SpoolID, signature, &spool_request.MessageID) {
+            let mut spool_id = [0u8; SPOOL_ID_SIZE];
+            spool_id[..].clone_from_slice(&spool_request.SpoolID);
+            let mut message_id = [0u8; MESSAGE_ID_SIZE];
+            message_id[..].clone_from_slice(&spool_request.MessageID);
+            match multi_spool.read_from_spool(spool_id, signature, &message_id) {
                 Ok(response_message) => {
                     spool_response = SpoolResponse {
                         SpoolID: spool_request.SpoolID,
